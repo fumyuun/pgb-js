@@ -76,6 +76,7 @@
 	
 <script>
 	var run = false;
+	var verbose_logging = false;
 	var bios_load = false;
 	var game_load = false;
 	
@@ -154,7 +155,7 @@
 					var char = bin_string.charCodeAt(i);
 					game_temp[i] = (char & 0xFF);
 				}
-				for(var i = 0xFF; i < Math.min(0x8000, bin_string.length-0xFF); i++)
+				for(var i = 0xFF; i < Math.min(0x8000, bin_string.length); i++)
 				{
 					var char = bin_string.charCodeAt(i);
 					memory[i] = (char & 0xFF);
@@ -412,7 +413,7 @@
 			case 0xBE:  cpu_cp_hl();								break;
 			case 0xBF:  cpu_cp_reg("A");							break;
 			case 0xC1:	cpu_pop("B", "C");							break;
-			case 0xC3:  cpu_jump(arg1, arg2);				registers["PC"]+=1;	break;
+			case 0xC3:  cpu_jump(arg1, arg2);						break;
 			case 0xC5:	cpu_push("B", "C");							break;
 			case 0xC9:	cpu_ret();									break;
 			case 0xCD:	registers["PC"]+=2;	cpu_call(arg1, arg2);	break;
@@ -475,12 +476,14 @@
 		
 		
 		document.getElementById("last_instr").innerHTML = last_instr_str;
-		/*
-		var con_lnode = document.createElement("li");
-		var con_tnode = document.createTextNode(last_instr_str);
-		con_lnode.appendChild(con_tnode);
-		document.getElementById("console").appendChild(con_lnode);
-		 */
+		if(verbose_logging)
+		{
+			var con_lnode = document.createElement("li");
+			var con_tnode = document.createTextNode(last_instr_str);
+			con_lnode.appendChild(con_tnode);
+			document.getElementById("console").appendChild(con_lnode);
+		}
+		
 	}
 	
 	function cpu_load_reg16_nn(desth, destl, srcl, srch)
@@ -853,7 +856,7 @@
 		registers["PC"] += offset;
 	}
 
-	function cpu_jump(desth, destl)
+	function cpu_jump(destl, desth)
 	{
 		var val = (((desth & 0xFF) << 8) | (destl & 0xFF)) & 0xFFFF;
 		last_instr_str += "JP 0x" + val.toString(16);
