@@ -415,10 +415,12 @@
 			case 0xC1:	cpu_pop("B", "C");							break;
 			case 0xC3:  cpu_jump(arg1, arg2);						break;
 			case 0xC5:	cpu_push("B", "C");							break;
+			case 0xC8:  cpu_ret_c(true, FLAG_Z);					break;
 			case 0xC9:	cpu_ret();									break;
 			case 0xCD:	registers["PC"]+=2;	cpu_call(arg1, arg2);	break;
 			case 0xD1:	cpu_pop("D", "E");							break;
 			case 0xD5:	cpu_push("D", "E");							break;
+			case 0xD6:  cpu_sub_n(arg1);		registers["PC"]+=1;	break;
 		//	case 0xDA:  removed OUTA(byte)
 		//	case 0xD9:  RETI
 		//  case 0xDB:  removed INA(byte)
@@ -699,6 +701,21 @@
 		registers["A"] = (temp & 0xFF);
 	}
 
+	function cpu_sub_n(src)
+	{
+		last_instr_str += "SUB 0x" + src.toString(16);
+		var temp = registers["A"] - src;
+		if((temp & 0xFF) == 0)	registers["F"] |= FLAG_Z;
+		else					registers["F"] &= ~FLAG_Z;
+		registers["F"] &= ~FLAG_N;
+		if((temp & 0x10) == 0x10)	registers["F"] |= FLAG_H;
+		else						registers["F"] &= ~FLAG_H;
+		if((temp & 0x100) == 0x100)	registers["F"] |= FLAG_C;
+		else						registers["F"] &= ~FLAG_C;
+		
+		registers["A"] = (temp & 0xFF);
+	}
+
 	function cpu_sbc_reg(src)
 	{
 		last_instr_str += "SBC " + src;
@@ -966,6 +983,22 @@
 		var pcl = memory[registers["SP"]++] & 0xFF;
 		var pch = memory[registers["SP"]++] & 0xFF;
 		registers["PC"] = ((pch << 8) | pcl) & 0xFFFF;
+	}
+
+	function cpu_ret_c(tf, flag)
+	{
+		last_instr_str += "RET ";
+		cpu_print_flag(tf, flag);
+		if((registers["F"] & flag) == (tf ? flag : 0x00))
+		{
+			last_instr_str += ": true";
+			if(call_depth.length > 0)
+				call_depth = call_depth.substring(call_depth.length, 1);
+			var pcl = memory[registers["SP"]++] & 0xFF;
+			var pch = memory[registers["SP"]++] & 0xFF;
+			registers["PC"] = ((pch << 8) | pcl) & 0xFFFF;
+		}
+		else last_instr_str += ": false";
 	}
 	
 	function cpu_push(regh, regl)
