@@ -45,7 +45,6 @@ function page_init()
 	document.getElementById("bios_file").addEventListener('change', handle_biosfile_event, false);
 	document.getElementById("game_file").addEventListener('change', handle_gamefile_event, false);
 	document.getElementById("start_button").addEventListener('click', handle_startbutton_event);
-	alert("Test");
 };
 
 function handle_biosfile_event(evt)
