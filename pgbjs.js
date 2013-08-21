@@ -2,6 +2,7 @@ var run = false;
 var verbose_logging = false;
 var bios_load = false;
 var game_load = false;
+var boot_complete = false;
 
 var FLAG_Z = 0x80;
 var FLAG_N = 0x40;
@@ -27,7 +28,7 @@ var call_depth = "";
 var loop_cpuinterval;
 var loop_gpuinterval;
 
-var game_temp = new Array(0xFF);
+var game_temp = new Array(0x100);
 var memory = new Array(0x10000);
 
 var screen_2d;
@@ -97,7 +98,7 @@ function handle_gamefile_event(evt)
 		{
 			var bin_string = e.target.result;
 			document.getElementById("rom_size").innerHTML = "0x" + bin_string.length.toString(16);
-			for(var i = 0; i < Math.min(0x100, bin_string.length); i++)
+			for(var i = 0; i < Math.min(0xFF, bin_string.length); i++)
 			{
 				var char = bin_string.charCodeAt(i);
 				game_temp[i] = (char & 0xFF);
@@ -188,15 +189,14 @@ function draw_screen()
 
 function cpu_cycle()
 {
-	if(memory[0xFF50] != 0x00)
+	if(!boot_complete && memory[0xFF50] != 0x00)
 	{
-		alert("Booting complete");
+		boot_complete = true;
 		document.getElementById("console").innerHTML = "Booting complete.";
-		run = false;
-		clearInterval(loop_cpuinterval);
-		clearInterval(loop_gpuinterval);
-		// TODO: "Connect" game header to BIOS header memory space (0x00-0xFF)
-		return;
+		for(var i = 0; i < 0xFF; ++i)
+		{
+			memory[i] = game_temp[i];
+		}
 	}
 	
 	var instr = memory[registers["PC"]++];
@@ -351,7 +351,31 @@ function cpu_cycle()
 		case 0x95:  cpu_sub_reg("L");			break;
 		case 0x96:  cpu_sub_hl();				break;
 		case 0x97:  cpu_sub_reg("A");			break;
+		
+		case 0xA0:	cpu_and_reg("B");			break;
+		case 0xA1:	cpu_and_reg("C");			break;
+		case 0xA2:	cpu_and_reg("D");			break;
+		case 0xA3:	cpu_and_reg("E");			break;
+		case 0xA4:	cpu_and_reg("H");			break;
+		case 0xA5:	cpu_and_reg("L");			break;
+		case 0xA6:	cpu_and_hl();				break;
+		case 0xA7:	cpu_and_reg("A");			break;
+		case 0xA8:	cpu_xor_reg("B");			break;
+		case 0xA9:	cpu_xor_reg("C");			break;
+		case 0xAA:	cpu_xor_reg("D");			break;
+		case 0xAB:	cpu_xor_reg("E");			break;
+		case 0xAC:	cpu_xor_reg("H");			break;
+		case 0xAD:	cpu_xor_reg("L");			break;
+		case 0xAE:	cpu_xor_hl();				break;
 		case 0xAF:	cpu_xor_reg("A");			break;
+		case 0xB0:	cpu_or_reg("B");			break;
+		case 0xB1:	cpu_or_reg("C");			break;
+		case 0xB2:	cpu_or_reg("D");			break;
+		case 0xB3:	cpu_or_reg("E");			break;
+		case 0xB4:	cpu_or_reg("H");			break;
+		case 0xB5:	cpu_or_reg("L");			break;
+		case 0xB6:	cpu_or_hl();				break;
+		case 0xB7:	cpu_or_reg("A");			break;
 		case 0xB8:  cpu_cp_reg("B");							break;
 		case 0xB9:  cpu_cp_reg("C");							break;
 		case 0xBA:  cpu_cp_reg("D");							break;
@@ -377,7 +401,9 @@ function cpu_cycle()
 		case 0xE1:	cpu_pop("H", "L");							break;
 		case 0xE2:	cpu_load_c_a();								break;
 		case 0xE5:	cpu_push("H", "L");							break;
+		case 0xE6:	cpu_and_n(arg1);		registers["PC"]+=1;	break;
 		case 0xEA:	cpu_load_nn_reg(arg1, arg2, "A");	registers["PC"]+=2;	break;
+		case 0xEE:	cpu_xor_n(arg1);		registers["PC"]+=1;	break;
 	//  case 0xBE:  removed EX DE,HL
 	//  case 0xEC:  removed JP PE,word
 		case 0xF0:	cpu_loadh_a_n(arg1);	registers["PC"]+=1;	break;
@@ -386,8 +412,10 @@ function cpu_cycle()
 		case 0xF3:	cpu_di();									break;
 	//  case 0xF4:  removed CALL P,word
 		case 0xF5:	cpu_push("A", "F");							break;
+		case 0xF6:	cpu_or_n(arg1);			registers["PC"]+=1;	break;
 	//  case 0xF8:  LDHL SP,offset
 	//  case 0xFA:  LD A,(word)
+		case 0xFB:	cpu_ei();									break;
 	//  case 0xFC:  removed CALL M,word
 	//  case 0xFD:  removed FD prefix
 		case 0xFE:	cpu_cp_n(arg1);			registers["PC"]+=1;	break;	
@@ -434,6 +462,9 @@ function cpu_cycle()
 		con_lnode.appendChild(con_tnode);
 		document.getElementById("console").appendChild(con_lnode);
 	}
+	
+	// More vsync hacks... :(
+	memory[LY_ADR] = (memory[LY_ADR] == 0x90 ? 0x94 : 0x90);
 }
 
 function cpu_load_reg16_nn(desth, destl, srcl, srch)
@@ -513,8 +544,6 @@ function cpu_load_nn_reg(destl, desth, src)
 
 function cpu_loadh_n_a(n)
 {
-	last_instr_str += "<" + n.toString(16) + ">";
-
 	var adr = (0xFF00 + (n & 0xFF));
 	last_instr_str += "LD (0xFF00 + 0x" + n.toString(16) + "), A";
 	memory[adr & 0xFFFF] = registers["A"];
@@ -686,7 +715,7 @@ function cpu_sbc_reg(src)
 
 function cpu_sub_hl()
 {
-	last_instr_str += "SUB HL";
+	last_instr_str += "SUB (HL)";
 	var adr = ((registers["H"] & 0xFF) << 8) | (registers["L"] & 0xFF);
 	var temp = registers["A"] - memory[adr & 0xFFFF];
 	if((temp & 0xFF) == 0)	registers["F"] |= FLAG_Z;
@@ -700,11 +729,101 @@ function cpu_sub_hl()
 	registers["A"] = (temp & 0xFF);
 }
 
+function cpu_and_reg(src)
+{
+	last_instr_str += "AND " + src;
+	var temp = registers["A"] & registers[src];
+	if((temp & 0xFF) == 0)	registers["F"] |= FLAG_Z;
+	else					registers["F"] &= ~FLAG_Z;
+	registers["F"] &= ~FLAG_N;
+	registers["F"] &= FLAG_H;
+	registers["F"] &= ~FLAG_C;
+}
+
+function cpu_and_hl()
+{
+	last_instr_str += "AND (HL)";
+	var adr = ((registers["H"] & 0xFF) << 8) | (registers["L"] & 0xFF);
+	var temp = registers["A"] & registers[adr & 0xFFFF];
+	if((temp & 0xFF) == 0)	registers["F"] |= FLAG_Z;
+	else					registers["F"] &= ~FLAG_Z;
+	registers["F"] &= ~FLAG_N;
+	registers["F"] &= FLAG_H;
+	registers["F"] &= ~FLAG_C;
+}
+
+function cpu_and_n(n)
+{
+	last_instr_str += "AND 0x" + n.toString(16);
+	var temp = registers["A"] & n;
+	if((temp & 0xFF) == 0)	registers["F"] |= FLAG_Z;
+	else					registers["F"] &= ~FLAG_Z;
+	registers["F"] &= ~FLAG_N;
+	registers["F"] &= FLAG_H;
+	registers["F"] &= ~FLAG_C;
+}
 
 function cpu_xor_reg(src)
 {
 	last_instr_str += "XOR " + src;
 	var temp = registers["A"] ^ registers[src];
+	if((temp & 0xFF) == 0)	registers["F"] |= FLAG_Z;
+	else					registers["F"] &= ~FLAG_Z;
+	registers["F"] &= ~FLAG_N;
+	registers["F"] &= ~FLAG_H;
+	registers["F"] &= ~FLAG_C;
+}
+
+function cpu_xor_hl()
+{
+	last_instr_str += "XOR (HL)";
+	var adr = ((registers["H"] & 0xFF) << 8) | (registers["L"] & 0xFF);
+	var temp = registers["A"] ^ registers[adr & 0xFFFF];
+	if((temp & 0xFF) == 0)	registers["F"] |= FLAG_Z;
+	else					registers["F"] &= ~FLAG_Z;
+	registers["F"] &= ~FLAG_N;
+	registers["F"] &= ~FLAG_H;
+	registers["F"] &= ~FLAG_C;
+}
+
+function cpu_xor_n(n)
+{
+	last_instr_str += "XOR 0x" + n.toString(16);
+	var temp = registers["A"] ^ n;
+	if((temp & 0xFF) == 0)	registers["F"] |= FLAG_Z;
+	else					registers["F"] &= ~FLAG_Z;
+	registers["F"] &= ~FLAG_N;
+	registers["F"] &= ~FLAG_H;
+	registers["F"] &= ~FLAG_C;
+}
+
+function cpu_or_reg(src)
+{
+	last_instr_str += "OR " + src;
+	var temp = registers["A"] | registers[src];
+	if((temp & 0xFF) == 0)	registers["F"] |= FLAG_Z;
+	else					registers["F"] &= ~FLAG_Z;
+	registers["F"] &= ~FLAG_N;
+	registers["F"] &= ~FLAG_H;
+	registers["F"] &= ~FLAG_C;
+}
+
+function cpu_or_hl()
+{
+	last_instr_str += "OR (HL)";
+	var adr = ((registers["H"] & 0xFF) << 8) | (registers["L"] & 0xFF);
+	var temp = registers["A"] | registers[adr & 0xFFFF];
+	if((temp & 0xFF) == 0)	registers["F"] |= FLAG_Z;
+	else					registers["F"] &= ~FLAG_Z;
+	registers["F"] &= ~FLAG_N;
+	registers["F"] &= ~FLAG_H;
+	registers["F"] &= ~FLAG_C;
+}
+
+function cpu_or_n(n)
+{
+	last_instr_str += "OR 0x" + n.toString(16);
+	var temp = registers["A"] | n;
 	if((temp & 0xFF) == 0)	registers["F"] |= FLAG_Z;
 	else					registers["F"] &= ~FLAG_Z;
 	registers["F"] &= ~FLAG_N;
