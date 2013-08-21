@@ -8,6 +8,18 @@ var FLAG_N = 0x40;
 var FLAG_H = 0x20;
 var FLAG_C = 0x10;
 
+var INT_HILO = 0x10;
+var INT_SEIO = 0x08;
+var INT_TIMO = 0x04;
+var INT_LCDC = 0x02;
+var INT_VBLK = 0x01;
+
+var EMI = false;
+var IF_ADR = 0xFF0F;
+var IE_ADR = 0xFFFF;
+
+var LY_ADR = 0xFF44;
+
 var registers = {};
 var last_instr_str = "foo";
 var call_depth = "";
@@ -85,12 +97,12 @@ function handle_gamefile_event(evt)
 		{
 			var bin_string = e.target.result;
 			document.getElementById("rom_size").innerHTML = "0x" + bin_string.length.toString(16);
-			for(var i = 0; i < Math.min(0xFF, bin_string.length); i++)
+			for(var i = 0; i < Math.min(0x100, bin_string.length); i++)
 			{
 				var char = bin_string.charCodeAt(i);
 				game_temp[i] = (char & 0xFF);
 			}
-			for(var i = 0xFF; i < Math.min(0x8000, bin_string.length); i++)
+			for(var i = 0x100; i < Math.min(0x8000, bin_string.length); i++)
 			{
 				var char = bin_string.charCodeAt(i);
 				memory[i] = (char & 0xFF);
@@ -178,6 +190,7 @@ function cpu_cycle()
 {
 	if(memory[0xFF50] != 0x00)
 	{
+		alert("Booting complete");
 		document.getElementById("console").innerHTML = "Booting complete.";
 		run = false;
 		clearInterval(loop_cpuinterval);
@@ -370,6 +383,7 @@ function cpu_cycle()
 		case 0xF0:	cpu_loadh_a_n(arg1);	registers["PC"]+=1;	break;
 		case 0xF1:	cpu_pop("A", "F");							break;
 	//  case 0xF2:  removed JP P,word
+		case 0xF3:	cpu_di();									break;
 	//  case 0xF4:  removed CALL P,word
 		case 0xF5:	cpu_push("A", "F");							break;
 	//  case 0xF8:  LDHL SP,offset
@@ -420,7 +434,6 @@ function cpu_cycle()
 		con_lnode.appendChild(con_tnode);
 		document.getElementById("console").appendChild(con_lnode);
 	}
-	
 }
 
 function cpu_load_reg16_nn(desth, destl, srcl, srch)
@@ -500,6 +513,8 @@ function cpu_load_nn_reg(destl, desth, src)
 
 function cpu_loadh_n_a(n)
 {
+	last_instr_str += "<" + n.toString(16) + ">";
+
 	var adr = (0xFF00 + (n & 0xFF));
 	last_instr_str += "LD (0xFF00 + 0x" + n.toString(16) + "), A";
 	memory[adr & 0xFFFF] = registers["A"];
@@ -988,6 +1003,16 @@ function cpu_cp_hl()
 	else						registers["F"] &= ~FLAG_H;
 	if((temp & 0x100) == 0x100)	registers["F"] |= FLAG_C;
 	else						registers["F"] &= ~FLAG_C;
+}
+
+function cpu_ei()
+{
+	IME = true;
+}
+
+function cpu_di()
+{
+	IME = false;
 }
 
 function cpu_cpl()
